@@ -6,6 +6,12 @@ const PhoneRegistration = ({ onSuccess, onClose }) => {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
+  // Normalize backend base URL (remove trailing slashes)
+  const getBackendUrl = () => {
+    const raw = import.meta.env.VITE_BACKEND_URL || "https://skybook-backend.onrender.com";
+    return raw.replace(/\/+$/, "");
+  };
+
   const handleSubmit = async (e) => {
     e.preventDefault();
     setLoading(true);
@@ -28,20 +34,38 @@ const PhoneRegistration = ({ onSuccess, onClose }) => {
     try {
       // Get Firebase ID token for authentication
       const token = await auth.currentUser.getIdToken();
+      // Normalize phone (remove spaces/hyphens)
+      const normalizedPhone = phoneNumber.replace(/[\s-]/g, '');
       
-      const backendUrl = import.meta.env.VITE_BACKEND_URL || "https://skybook-backend.onrender.com";
+      const backendUrl = getBackendUrl();
       const response = await fetch(`${backendUrl}/api/register-phone`, {
         method: "POST",
         headers: {
           "Content-Type": "application/json",
           "Authorization": `Bearer ${token}`
         },
-        body: JSON.stringify({ phoneNumber }),
+        body: JSON.stringify({ phoneNumber: normalizedPhone }),
       });
+
+      if (!response.ok) {
+        const errText = await response.text();
+        let errJson = null;
+        try { errJson = JSON.parse(errText); } catch (e) {}
+        if (response.status === 400) {
+          const code = errJson?.code;
+          const message = errJson?.error || '';
+          if (code === 'invalid_phone_number' || /Invalid phone number format/i.test(message)) {
+            setError("Invalid phone number. Use format +919876543210.");
+            return;
+          }
+        }
+        setError(errJson?.error || "Failed to register phone number");
+        return;
+      }
 
       const data = await response.json();
       if (data.success) {
-        onSuccess(phoneNumber);
+        onSuccess(normalizedPhone);
       } else {
         setError(data.error || "Failed to register phone number");
       }
@@ -99,11 +123,11 @@ const PhoneRegistration = ({ onSuccess, onClose }) => {
               value={phoneNumber}
               onChange={(e) => setPhoneNumber(e.target.value)}
               className="w-full px-4 py-3 border border-gray-300 rounded-lg focus:ring-2 focus:ring-green-500 focus:border-transparent transition-colors"
-              placeholder="+1 (555) 123-4567"
+              placeholder="+91 98765 43210"
               required
             />
             <p className="text-xs text-gray-500 mt-2">
-              Include country code (e.g., +1 for US)
+              Include country code (e.g., +91 for India)
             </p>
           </div>
 
